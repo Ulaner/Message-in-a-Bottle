@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Message in a Bottle — Hudson River</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;font-family:Georgia,serif;background:#071724;color:#fff}
+body{display:flex;justify-content:center;padding:18px}
+#game{position:relative;width:min(1200px,100%);height:min(760px,calc(100vh - 36px));min-height:620px;overflow:hidden;border-radius:20px;background:#2b6882;box-shadow:0 20px 70px #0008}
+#scene{position:absolute;left:0;right:0;top:0;height:45%;background:#76b8d1 center top/100% 100% no-repeat;transition:filter .6s,background-image .6s;z-index:0;overflow:hidden}
+#scene.day{background-image:url('assets/background-day.png')}
+#scene.sunset{background-image:url('assets/background-sunset.png')}
+#scene.night{background-image:url('assets/background-night.png')}
+.scene-tint{position:absolute;inset:0;pointer-events:none;transition:background .5s}
+.water{position:absolute;left:0;right:0;top:45%;bottom:0;z-index:1;overflow:hidden;background:linear-gradient(to bottom,#2d7894 0%,#246b87 42%,#185873 100%);}
+.water:before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(172deg,transparent 0 27px,#ffffff12 28px 30px,transparent 31px 56px);animation:waterShift 11s linear infinite;}
+@keyframes waterShift{to{transform:translateX(120px)}}
+.day .scene-tint{background:linear-gradient(#78c6ef22,#ffffff00 52%,#0a567522)}
+.sunset .scene-tint{background:linear-gradient(#ff7a3325,#ffb15a12 45%,#5a1c5a22)}
+.night .scene-tint{background:linear-gradient(#07133366,#07133318 50%,#020b1f44)}
+.water-overlay{position:absolute;left:0;right:0;top:45%;bottom:0;z-index:2;overflow:hidden;pointer-events:none;background:linear-gradient(to bottom,rgba(255,255,255,.05),transparent 35%,rgba(0,20,35,.12));mix-blend-mode:screen;opacity:.85}
+.water-line{position:absolute;width:190px;height:4px;border-radius:50%;background:#ffffff38;animation:waterDrift 6s linear infinite}
+.water-line.l1{top:22%;left:-220px}.water-line.l2{top:46%;left:32%;animation-delay:1.8s}.water-line.l3{top:72%;left:-180px;animation-delay:3.1s}
+@keyframes waterDrift{to{transform:translateX(1450px)}}
+
+/* Scene mode controls */
+.modebar{position:absolute;z-index:40;left:50%;top:14px;transform:translateX(-50%);display:flex;gap:5px;background:#061d2ccc;padding:5px;border-radius:18px;font:12px system-ui,sans-serif}
+.modebar button{border:0;border-radius:13px;padding:6px 10px;background:transparent;color:#fff;cursor:pointer}
+.modebar button.active{background:#ffffff2b}
+.status{position:absolute;z-index:40;top:14px;left:14px;background:#061d2ccc;padding:7px 11px;border-radius:15px;font:12px system-ui,sans-serif}
+.share{position:absolute;z-index:40;top:14px;right:14px;background:#061d2ccc;padding:8px 12px;border-radius:15px;font:12px system-ui,sans-serif;cursor:pointer}
+
+/* Moving boats: PNG contains only the boat, never a wake. */
+.boat{position:absolute;z-index:8;pointer-events:none;filter:drop-shadow(0 5px 4px #0006);animation-timing-function:linear;animation-iteration-count:infinite}
+.boat img{display:block;width:100%;height:auto}
+.b1{width:150px;top:55%;left:-180px;animation:boatRight 25s linear infinite}
+.b2{width:125px;top:67%;right:-160px;animation:boatLeft 18s linear infinite}
+.b3{width:120px;top:82%;left:-150px;animation:boatRight 31s linear infinite}
+.b4{width:155px;top:59%;right:-190px;animation:boatLeft 28s linear infinite}
+@keyframes boatRight{from{left:-18%}to{left:112%}}
+@keyframes boatLeft{from{right:-18%}to{right:112%}}
+
+/* Bottle */
+#bottle{position:absolute;z-index:15;width:92px;left:-110px;top:69%;cursor:pointer;filter:drop-shadow(0 7px 5px #0007);animation:floatRight 15s linear infinite}
+#bottle img{display:block;width:100%;height:auto}
+#bottle.travel-left{animation-name:floatLeft}
+#bottle.travel-right{animation-name:floatRight}
+#bottle.caught{animation:none!important;transition:left .9s cubic-bezier(.2,.8,.2,1),top .9s cubic-bezier(.2,.8,.2,1),transform .9s cubic-bezier(.2,.8,.2,1);left:50%!important;top:50%!important;transform:translate(-50%,-50%) rotate(-7deg) scale(1.25)!important;cursor:default}
+@keyframes floatRight{
+0%{left:-12%;top:69%;transform:rotate(-8deg)}
+18%{top:64%;transform:rotate(4deg)}
+38%{top:76%;transform:rotate(8deg)}
+58%{top:67%;transform:rotate(-4deg)}
+78%{top:78%;transform:rotate(6deg)}
+100%{left:108%;top:70%;transform:rotate(-7deg)}
+}
+@keyframes floatLeft{
+0%{right:-12%;left:auto;top:70%;transform:rotate(7deg) scaleX(-1)}
+20%{top:77%;transform:rotate(-5deg) scaleX(-1)}
+40%{top:66%;transform:rotate(-8deg) scaleX(-1)}
+60%{top:75%;transform:rotate(5deg) scaleX(-1)}
+80%{top:65%;transform:rotate(-4deg) scaleX(-1)}
+100%{right:108%;left:auto;top:71%;transform:rotate(7deg) scaleX(-1)}
+}
+
+.instructions{position:absolute;z-index:30;left:50%;bottom:25px;transform:translateX(-50%);background:#061d2ccc;padding:10px 17px;border-radius:20px;font:14px system-ui,sans-serif;white-space:nowrap}
+.modal{position:absolute;z-index:50;left:50%;top:50%;transform:translate(-50%,-50%);display:none;width:min(520px,90%)}
+.modal.show{display:block}
+.paper{background:#fffaf0;color:#33291f;border-radius:8px;padding:30px;box-shadow:0 25px 70px #0009;transform:rotate(-1deg)}
+.paper h2{margin-top:0}.paper button,.composer button{border:0;border-radius:10px;padding:12px 18px;background:#315d72;color:white;font:bold 15px system-ui,sans-serif;cursor:pointer}
+.composer{background:#071e2cf5;padding:22px;border-radius:15px;box-shadow:0 25px 70px #0009}
+textarea{display:block;width:100%;height:150px;border:0;border-radius:10px;padding:14px;margin:10px 0 12px;font:16px system-ui,sans-serif;resize:none}
+.toast{position:absolute;z-index:60;left:50%;top:70px;transform:translateX(-50%);background:#071e2cf5;padding:10px 15px;border-radius:10px;display:none;font:14px system-ui,sans-serif}
+.side-note{position:absolute;z-index:40;left:14px;bottom:14px;background:#061d2ccc;padding:7px 11px;border-radius:15px;font:12px system-ui,sans-serif}
+
+@media(max-width:700px){
+ body{padding:0}#game{height:100vh;min-height:560px;border-radius:0}.modebar{top:10px}.status{top:54px}.share{top:54px}.instructions{bottom:18px;font-size:12px}.boat.b1{width:115px}.boat.b2{width:95px}.boat.b3{width:90px}.boat.b4{width:120px}#bottle{width:72px}
+}
+</style>
+</head>
+<body>
+<div id="game">
+  <div id="scene" class="day"><div class="scene-tint"></div></div>
+  <div class="water"></div>
+  <div class="water-overlay"><div class="water-line l1"></div><div class="water-line l2"></div><div class="water-line l3"></div></div>
+
+  <div class="status" id="status">Connecting…</div>
+  <div class="share" id="share">Copy conversation link</div>
+  <div class="toast" id="toast"></div>
+  <div class="modebar" aria-label="Scene mode">
+    <button data-mode="day" class="active">☀ Day</button>
+    <button data-mode="sunset">🌅 Sunset</button>
+    <button data-mode="night">🌙 Night</button>
+  </div>
+  <div class="side-note" id="sideNote">Assigning your side…</div>
+
+  <div class="boat b1"><img src="assets/hudson-ferry.png" alt="Hudson ferry"></div>
+  <div class="boat b2"><img src="assets/speedboat.png" alt="Speedboat"></div>
+  <div class="boat b3"><img src="assets/sailboat.png" alt="Sailboat"></div>
+  <div class="boat b4"><img src="assets/tour-boat.png" alt="Tour boat"></div>
+
+  <div id="bottle" aria-label="Message bottle">
+    <img src="assets/bottle.png" alt="Glass bottle with a message">
+  </div>
+
+  <div class="instructions" id="instructions">Waiting for a bottle…</div>
+
+  <div class="modal" id="letterModal">
+    <div class="paper">
+      <h2>💌 A Message from the Hudson</h2>
+      <p id="messageText"></p>
+      <p><em>— Someone across the river</em></p>
+      <button id="replyButton">Write a reply</button>
+    </div>
+  </div>
+
+  <div class="modal" id="composerModal">
+    <div class="composer">
+      <h2>🍾 Write your message</h2>
+      <textarea id="replyText" placeholder="Write something to float down the Hudson..."></textarea>
+      <button id="releaseButton">Release my bottle</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+import {
+  getFirestore, doc, collection, addDoc, query, orderBy,
+  onSnapshot, serverTimestamp, runTransaction, getDoc
+} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDTa58sr-u5qt6AkNHGkF-VbAe5t3GnCi4",
+  authDomain: "message-in-a-bottle-e98c9.firebaseapp.com",
+  projectId: "message-in-a-bottle-e98c9",
+  storageBucket: "message-in-a-bottle-e98c9.firebasestorage.app",
+  messagingSenderId: "919077596077",
+  appId: "1:919077596077:web:2f2811b41eaa198f3acf24"
+};
+
+const firebaseReady = !firebaseConfig.apiKey.includes("PASTE_");
+const game=document.getElementById("game"), scene=document.getElementById("scene");
+const bottle=document.getElementById("bottle"), instructions=document.getElementById("instructions");
+const status=document.getElementById("status"), sideNote=document.getElementById("sideNote");
+const letterModal=document.getElementById("letterModal"), composerModal=document.getElementById("composerModal");
+const messageText=document.getElementById("messageText"), replyText=document.getElementById("replyText");
+const replyButton=document.getElementById("replyButton"), releaseButton=document.getElementById("releaseButton");
+const share=document.getElementById("share"), toast=document.getElementById("toast");
+const params=new URLSearchParams(location.search);
+let conversationId=params.get("c");
+if(!conversationId){
+  conversationId=crypto.randomUUID().replaceAll("-","").slice(0,12);
+  const u=new URL(location.href);u.searchParams.set("c",conversationId);history.replaceState({},"",u);
+}
+let messages=[], mySide=null, caught=false, latestShownId=null, db=null, messagesRef=null;
+
+function showToast(t){toast.textContent=t;toast.style.display="block";setTimeout(()=>toast.style.display="none",1800)}
+share.addEventListener("click",async()=>{try{await navigator.clipboard.writeText(location.href);showToast("Conversation link copied!")}catch{prompt("Copy this conversation link:",location.href)}});
+
+document.querySelectorAll(".modebar button").forEach(btn=>btn.addEventListener("click",()=>{
+  const mode=btn.dataset.mode; scene.className=mode; localStorage.setItem("hudson-mode",mode);
+  document.querySelectorAll(".modebar button").forEach(b=>b.classList.toggle("active",b===btn));
+}));
+const savedMode=localStorage.getItem("hudson-mode")||"day";
+scene.className=savedMode;document.querySelectorAll(".modebar button").forEach(b=>b.classList.toggle("active",b.dataset.mode===savedMode));
+
+function directionFor(side){return side==="westPoint"?"east":"west"}
+function resetBottle(){caught=false;bottle.className="";bottle.style.cssText="";bottle.style.display="block"}
+function animateBottle(direction){
+  resetBottle();
+  bottle.classList.add(direction==="east"?"travel-right":"travel-left");
+  instructions.textContent="A bottle is floating down the Hudson — catch it!";
+}
+function catchBottle(){
+  if(caught)return;caught=true;
+  const br=bottle.getBoundingClientRect(),gr=game.getBoundingClientRect();
+  bottle.style.animation="none";bottle.style.left=(br.left-gr.left)+"px";bottle.style.top=(br.top-gr.top)+"px";
+  bottle.style.right="auto";bottle.style.transform=directionFor(mySide)==="east"?"rotate(-7deg) scale(1)":"rotate(7deg) scaleX(-1) scale(1)";
+  void bottle.offsetWidth;bottle.classList.add("caught");instructions.textContent="Bottle caught!";
+  setTimeout(()=>{
+    const latest=messages[messages.length-1];
+    messageText.textContent=latest?.text||"The bottle is empty…";letterModal.classList.add("show");
+  },950);
+}
+bottle.addEventListener("click",catchBottle);
+replyButton.addEventListener("click",()=>{letterModal.classList.remove("show");composerModal.classList.add("show");replyText.focus()});
+
+function setSide(side){mySide=side;localStorage.setItem("hudson-side-"+conversationId,side);sideNote.textContent=side==="westPoint"?"📍 Your side: West Point":"📍 Your side: Manhattan"}
+async function claimSide(){
+  const saved=localStorage.getItem("hudson-side-"+conversationId);if(saved){setSide(saved);return saved}
+  const conv=doc(db,"conversations",conversationId), west=doc(conv,"participants","westPoint"), east=doc(conv,"participants","manhattan");
+  let assigned=null;
+  await runTransaction(db,async tx=>{
+    const [w,e]=await Promise.all([tx.get(west),tx.get(east)]);
+    if(!w.exists()){ tx.set(west,{claimedAt:serverTimestamp()}); assigned="westPoint"; }
+    else if(!e.exists()){ tx.set(east,{claimedAt:serverTimestamp()}); assigned="manhattan"; }
+    else throw new Error("FULL");
+  });
+  setSide(assigned);return mySide;
+}
+
+async function sendMessage(){
+  const text=replyText.value.trim();if(!text)return alert("Write a message first.");
+  if(!firebaseReady){
+    messages.push({id:String(Date.now()),text,senderSide:mySide,direction:directionFor(mySide)});
+    replyText.value="";composerModal.classList.remove("show");letterModal.classList.remove("show");animateBottle(directionFor(mySide));return;
+  }
+  try{
+    await addDoc(messagesRef,{text,senderSide:mySide,direction:directionFor(mySide),createdAt:serverTimestamp()});
+    replyText.value="";composerModal.classList.remove("show");letterModal.classList.remove("show");animateBottle(directionFor(mySide));
+  }catch(e){
+    console.error("Firestore send error:",e);
+    alert("Could not send the message. Firebase error: " + (e.code || e.message));
+  }
+}
+releaseButton.addEventListener("click",sendMessage);
+
+function handleMessages(next){
+  messages=next;
+  const latest=messages[messages.length-1];
+  if(!latest){instructions.textContent="Send the first bottle down the Hudson…";return}
+  if(latest.id===latestShownId)return;
+  latestShownId=latest.id;
+  const remote=latest.senderSide!==mySide;
+  if(remote){animateBottle(latest.direction)}
+  else instructions.textContent="Your bottle is floating down the Hudson…";
+}
+
+async function start(){
+  if(!firebaseReady){
+    setSide(localStorage.getItem("hudson-side-"+conversationId)||"westPoint");
+    status.textContent="Demo mode — Firebase not connected";
+    handleMessages([{id:"demo",text:"Hey! I found your bottle floating down the Hudson. Hope you're having a great day!",senderSide:"westPoint",direction:"east"}]);
+    return;
+  }
+  try{
+    const app=initializeApp(firebaseConfig);db=getFirestore(app);
+    await claimSide();
+    messagesRef=collection(doc(db,"conversations",conversationId),"messages");
+    const messagesQuery=query(messagesRef,orderBy("createdAt","asc"));
+    onSnapshot(messagesQuery,s=>{
+      status.textContent="Firebase connected";
+      handleMessages(s.docs.map(d=>({id:d.id,...d.data()})));
+    },e=>{
+      console.error("Firestore listener error:",e);
+      status.textContent="Firebase error: " + (e.code || "unknown");
+      instructions.textContent =
+        e.code === "permission-denied"
+          ? "Firestore denied access. Update your Firestore Security Rules."
+          : "Open F12 → Console for the exact Firebase error.";
+    });
+  }catch(e){
+    console.error("Firebase startup error:",e);
+    status.textContent="Firebase setup error: " + (e.code || "unknown");
+    if(e.message==="FULL"){
+      sideNote.textContent="This conversation already has two participants.";
+      instructions.textContent="This conversation already has two participants.";
+    }else if(e.code==="permission-denied"){
+      instructions.textContent="Firestore denied access. Update your Firestore Security Rules.";
+    }else{
+      instructions.textContent="Open F12 → Console for the exact Firebase error.";
+    }
+  }
+}
+start();
+</script>
+</body>
+</html>
