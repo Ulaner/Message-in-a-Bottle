@@ -9,13 +9,38 @@
 html,body{margin:0;min-height:100%;font-family:Georgia,serif;background:#071724;color:#fff}
 body{display:flex;justify-content:center;padding:18px}
 #game{position:relative;width:min(1200px,100%);height:min(760px,calc(100vh - 36px));min-height:620px;overflow:hidden;border-radius:20px;background:#2b6882;box-shadow:0 20px 70px #0008}
-#scene{position:absolute;left:0;right:0;top:0;height:45%;background:#76b8d1 center top/100% 100% no-repeat;transition:filter .6s,background-image .6s;z-index:0;overflow:hidden}
+#scene{position:absolute;left:0;right:0;top:0;height:45%;background:#76b8d1 center center/100% 100% no-repeat;transition:filter .6s,background-image .6s;z-index:0;overflow:hidden;clip-path:inset(0)}
 #scene.day{background-image:url('assets/background-day.png')}
 #scene.sunset{background-image:url('assets/background-sunset.png')}
 #scene.night{background-image:url('assets/background-night.png')}
 .scene-tint{position:absolute;inset:0;pointer-events:none;transition:background .5s}
-.water{position:absolute;left:0;right:0;top:45%;bottom:0;z-index:1;overflow:hidden;background:linear-gradient(to bottom,#2d7894 0%,#246b87 42%,#185873 100%);}
-.water:before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(172deg,transparent 0 27px,#ffffff12 28px 30px,transparent 31px 56px);animation:waterShift 11s linear infinite;}
+.water{
+  position:absolute;
+  left:0;
+  right:0;
+  top:45%;
+  bottom:0;
+  z-index:1;
+  overflow:hidden;
+  background-color:#246f8c;
+  background-image:url("assets/water.png");
+  background-repeat:repeat-x;
+  background-size:auto 100%;
+  background-position:0 center;
+  animation:waterTexture 24s linear infinite;
+}
+.water:before{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:repeating-linear-gradient(172deg,transparent 0 27px,#ffffff12 28px 30px,transparent 31px 56px);
+  animation:waterShift 11s linear infinite;
+  pointer-events:none;
+}
+@keyframes waterTexture{
+  from{background-position:0 center;}
+  to{background-position:-1000px center;}
+}
 @keyframes waterShift{to{transform:translateX(120px)}}
 .day .scene-tint{background:linear-gradient(#78c6ef22,#ffffff00 52%,#0a567522)}
 .sunset .scene-tint{background:linear-gradient(#ff7a3325,#ffb15a12 45%,#5a1c5a22)}
@@ -78,6 +103,13 @@ textarea{display:block;width:100%;height:150px;border:0;border-radius:10px;paddi
 @media(max-width:700px){
  body{padding:0}#game{height:100vh;min-height:560px;border-radius:0}.modebar{top:10px}.status{top:54px}.share{top:54px}.instructions{bottom:18px;font-size:12px}.boat.b1{width:115px}.boat.b2{width:95px}.boat.b3{width:90px}.boat.b4{width:120px}#bottle{width:72px}
 }
+
+/* Water PNG is the animated surface layer; boats and bottle stay above it. */
+.water{z-index:1;}
+.water-overlay{z-index:2;}
+.boat{z-index:8;}
+#bottle{z-index:15;}
+
 </style>
 </head>
 <body>
@@ -188,18 +220,63 @@ function catchBottle(){
 bottle.addEventListener("click",catchBottle);
 replyButton.addEventListener("click",()=>{letterModal.classList.remove("show");composerModal.classList.add("show");replyText.focus()});
 
-function setSide(side){mySide=side;localStorage.setItem("hudson-side-"+conversationId,side);sideNote.textContent=side==="westPoint"?"📍 Your side: West Point":"📍 Your side: Manhattan"}
+function getParticipantId(){
+  const key="hudson-participant-id-"+conversationId;
+  let id=localStorage.getItem(key);
+  if(!id){
+    id=(crypto.randomUUID?crypto.randomUUID():"p-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2));
+    localStorage.setItem(key,id);
+  }
+  return id;
+}
+function setSide(side){
+  mySide=side;
+  localStorage.setItem("hudson-side-"+conversationId,side);
+  sideNote.textContent=side==="westPoint"?"📍 Your side: West Point":"📍 Your side: Manhattan";
+  sideNote.title="Participant ID: "+getParticipantId();
+}
 async function claimSide(){
-  const saved=localStorage.getItem("hudson-side-"+conversationId);if(saved){setSide(saved);return saved}
-  const conv=doc(db,"conversations",conversationId), west=doc(conv,"participants","westPoint"), east=doc(conv,"participants","manhattan");
+  const sideKey="hudson-side-"+conversationId;
+  const participantKey="hudson-participant-id-"+conversationId;
+  const participantId=getParticipantId();
+  const saved=localStorage.getItem(sideKey);
+  if(saved){
+    // Keep the local assignment, but make sure Firebase records which participant ID owns it.
+    const participantRef=doc(db,"conversations",conversationId,"participants",saved);
+    const snap=await getDoc(participantRef);
+    if(snap.exists() && snap.data().participantId===participantId){
+      setSide(saved);
+      return saved;
+    }
+    // If this browser has a saved side but Firebase has no matching record, restore the record.
+    if(!snap.exists()){
+      await runTransaction(db,async tx=>{
+        const check=await tx.get(participantRef);
+        if(!check.exists()) tx.set(participantRef,{participantId,claimedAt:serverTimestamp()});
+      });
+      setSide(saved);
+      return saved;
+    }
+  }
+
+  const conv=doc(db,"conversations",conversationId);
+  const west=doc(conv,"participants","westPoint");
+  const east=doc(conv,"participants","manhattan");
   let assigned=null;
   await runTransaction(db,async tx=>{
     const [w,e]=await Promise.all([tx.get(west),tx.get(east)]);
-    if(!w.exists()){ tx.set(west,{claimedAt:serverTimestamp()}); assigned="westPoint"; }
-    else if(!e.exists()){ tx.set(east,{claimedAt:serverTimestamp()}); assigned="manhattan"; }
-    else throw new Error("FULL");
+    if(!w.exists()){
+      tx.set(west,{participantId,claimedAt:serverTimestamp()});
+      assigned="westPoint";
+    }else if(!e.exists()){
+      tx.set(east,{participantId,claimedAt:serverTimestamp()});
+      assigned="manhattan";
+    }else{
+      throw new Error("FULL");
+    }
   });
-  setSide(assigned);return mySide;
+  setSide(assigned);
+  return assigned;
 }
 
 async function sendMessage(){
